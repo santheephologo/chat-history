@@ -1,69 +1,17 @@
 import React, { useEffect, useState, useRef } from "react";
-import { io } from "socket.io-client";
 import "./Chatbot_App.css";
-import { TbMessageDots } from "react-icons/tb";
-import { AiOutlineCloseCircle } from "react-icons/ai";
 import { LuSendHorizonal } from "react-icons/lu";
-
-
-const App = ({configScript}) => {
-  const [config, setConfig] = useState(null);
-  const [socket, setSocket] = useState(null);
-  const [customUI, setCustomUI] = useState({
-    backgroundColor: 'lightblue'
-  });
-
-  useEffect(() => {
-    // console.log("config : "+configScript)
-    if (configScript) {
-      setConfig(configScript);
-      setCustomUI((prevConfig) => ({
-      ...prevConfig,
-      backgroundColor: configScript.CUSTOM_COLOR
-    }));
-    } else {
-      console.log("configuration failed")
-    }
-  }, []);
-
-  
-  useEffect(() => {
-    if (config) {
-      const socketInstance = io(config.SOCKET_URL);
-      setSocket(socketInstance);
-
-      socketInstance.on('connect', () => {
-        console.log("Socket.IO connection established");
-      });
-
-      socketInstance.on('disconnect', () => {
-        console.log("Socket.IO connection closed");
-      });
-
-      socketInstance.on('connect_error', (error) => {
-        console.error("Socket.IO connection error:", error);
-      });
-
-      
-    }
-  }, [config]);
-
-  if (!config) {
-    console.log("Loading configuration...");
-    return <div>Loading configuration...</div>;
-  }
-
-  if (config && socket) {
-    
-    return <ChatWidget socket={socket} client_id={config.CLIENT_ID} assitant_name={ config.ASSISTANT_NAME} customUI={customUI} />;
-  }
-
-  return null;
-};
-
-
-const ChatWidget = ({ socket, client_id, assitant_name, customUI }) => {
-  
+import { TbMessageDots } from "react-icons/tb";
+import { MdHistory } from "react-icons/md";
+import { AiOutlineCloseCircle } from "react-icons/ai";
+import HistoryRow from "./component/HistoryRow";
+import { io } from "socket.io-client";
+import UserMsg from "./component/UserMsg";
+import BotMsg from "./component/BotMsg";
+const socket = io("ws://localhost:5000");
+const ChatWidget = () => {
+  const [viewHistory, setViewHistory] = useState(false);
+  const [chatList, setChatList] = useState([]);
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [isChatVisible, setIsChatVisible] = useState(false);
@@ -72,27 +20,37 @@ const ChatWidget = ({ socket, client_id, assitant_name, customUI }) => {
   const [viewInitialPrompt, setViewInitialPrompt] = useState(true);
   const [connectionError, setConnectionError] = useState(false);
   const chatboxRef = useRef(null);
+  
 
   useEffect(() => {
     if (typing && viewInitialPrompt) {
       setViewInitialPrompt(false);
     }
   }, [typing, viewInitialPrompt]);
- 
 
-    useEffect(() => {
+  useEffect(() => {
     socket.on("connect", () => {
       setConnectionError(false)
+      console.log("connected")
+      socket.emit("get_chat_list", { username: "66836f2ef640cff3cdaa0d50" });
     });
     
-    }, []);
+  }, []);
+
+  useEffect(() => {
+    socket.on("chat_list", (data) => {
+      console.log(data)
+      setChatList(data)
+    });
+    
+  }, []);
   
-    useEffect(() => {
+  useEffect(() => {
     socket.on("disconnect", () => {
       setConnectionError(false)
       console.log("Socket.IO connection closed");
     });
-    }, []);
+  }, []);
   
   useEffect(() => {
     socket.on("response", (msg) => {
@@ -111,18 +69,20 @@ const ChatWidget = ({ socket, client_id, assitant_name, customUI }) => {
       setTyping(false);
       console.error("Socket.IO connection error:", error);
     });
-  },[])
+  }, [])
+  
   const addMessage = (sender, message) => {
     
     setMessages((prevMessages) => [...prevMessages, { sender, message }]);
+    console.log(messages)
   };
 
   const sendMessage = (message) => {
-    if (message.trim() !=="" && !connectionError) { 
+    if (message.trim() !=="" && !connectionError && !viewHistory) { 
       setInput("");
       setTyping(true);
       addMessage("User", message);
-      socket.emit("message", { client_id: client_id, message });
+      socket.emit("message", { client_id: "66836f2ef640cff3cdaa0d50", message });
     }
 
   };
@@ -131,11 +91,13 @@ const ChatWidget = ({ socket, client_id, assitant_name, customUI }) => {
     if (e.which === 13 && !e.shiftKey) {
       e.preventDefault();
       sendMessage(input);
+      setInput("");
     }
   };
 
   const toggleFab = () => {
     setIsChatVisible(!isChatVisible);
+    setViewHistory(false)
   };
 
   const toggleFullscreen = () => {
@@ -151,10 +113,10 @@ const ChatWidget = ({ socket, client_id, assitant_name, customUI }) => {
   return (
     <div className="chat_bot_main__mx__fabs">
       <div className={`chat_bot_main__mx ${isChatVisible ? "chat_bot_main__mx__is-visible" : ""}`}>
-        <div style={customUI } className={`chat_bot_main__mx_header`}>
+        <div className="custom chat_bot_main__mx_header">
           <div className="chat_bot_main__mx_option">
             <div className="chat_bot_main__mx_option_inner">
-              <div >
+              <div className="">
                 <div className="chat_bot_main__mx_header_img_container">
                   <img
                     className="chat_bot_main__mx_header_img"
@@ -170,8 +132,8 @@ const ChatWidget = ({ socket, client_id, assitant_name, customUI }) => {
                 </div>
                 
               </div>
-              <div>
-                <chatbot_span id="chat_bot_main__mx_head">{assitant_name && assitant_name }</chatbot_span>
+              <div className="chat_bot_main__mx_name">
+                <chatbot_span id="chat_bot_main__mx_head">Hologo AI</chatbot_span>
             {!typing && (
               <>
                 {" "}
@@ -205,14 +167,17 @@ const ChatWidget = ({ socket, client_id, assitant_name, customUI }) => {
         <div
           id="chat_bot_main__mx_fullscreen"
           ref={chatboxRef}
-          className={`chat_bot_main__mx_conversion chat_bot_main__mx_converse ${isFullscreen ? "chat_bot_main__mx_fullscreen" : ""}`}
+          className={`chat_bot_main__mx_conversion chat_bot_main__mx_converse ${(isFullscreen) ? "chat_bot_main__mx_fullscreen" : ""}`}
         >
+          {
+            !viewHistory ? (
+              <>
           {viewInitialPrompt && !connectionError && (
             <>
               <div className="initial_prompt">How may I assist you?</div>
             </>
           )}
-          
+  
           {messages.map((msg, index) => (
             <chatbot_span
               key={index}
@@ -247,28 +212,59 @@ const ChatWidget = ({ socket, client_id, assitant_name, customUI }) => {
           </chatbot_span>
               
             )
+          }            
+              </>
+            ) : (
+                
+                <div className="history-section">
+                  <div className="chat-history-single-row-header">Chat history</div>
+                      {chatList.map((data, index) => (
+                        <HistoryRow
+                          key={index}
+                          data={data}
+                        />
+                      ))}
+                  </div>
+              )
           }
         </div>
-
         <div className="fab_field">
-          <a id="fab_send" className="chat_bot_main__mx_body_a chat_bot_main__mx__send_btn" onClick={() => sendMessage(input)}>
-            <i className=""><LuSendHorizonal /></i>
-          </a>
-          <textarea
-            id="chat_bot_main__mxSend"
-            name="chat_bot_main__mx_message"
-            placeholder="Send a message"
-            className="chat_bot_main__mx_field chat_bot_main__mx_message chat_bot_main__mx_field_input"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyPress={handleSend}
-          ></textarea>
+          
+            
+                <a id="fab_send" className="chat_bot_main__mx_body_a chat_bot_main__mx__send_btn" onClick={() => sendMessage(input)}>
+                  <i className=""><LuSendHorizonal /></i>
+                </a>
+                <textarea
+                  id="chat_bot_main__mxSend"
+                  name="chat_bot_main__mx_message"
+                  placeholder="Send a message"
+                  className="chat_bot_main__mx_field chat_bot_main__mx_message chat_bot_main__mx_field_input"
+                  value={input}
+                  disabled={connectionError || viewHistory}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyPress={handleSend}
+                ></textarea>
+              
         </div>
       </div>
       <a
         id="prime"
-        style={customUI}
-        className={`fab ${isChatVisible ? "chat_bot_main__mx__is-visible  animate-view-spin" : ""}`}
+        className={`fab custom ${isChatVisible ? "chat_bot_main__mx__is-visible  animate-view-spin" : ""}`}
+        onClick={()=>{setViewHistory(!viewHistory)}}
+          >
+              <div className="chatbot_icon_mx_inner">
+                  {
+                      isChatVisible && (<div className="chatbot_icon_mx"><MdHistory /></div>)
+                  }
+                  {
+                       !isChatVisible && (<div className="chatbot_icon_mx"><MdHistory /></div>)
+                  }
+             </div>
+                  
+      </a>
+      <a
+        id="prime"
+        className={`fab custom ${isChatVisible ? "chat_bot_main__mx__is-visible  animate-view-spin" : ""}`}
         onClick={toggleFab}
           >
               <div className="chatbot_icon_mx_inner">
@@ -285,4 +281,4 @@ const ChatWidget = ({ socket, client_id, assitant_name, customUI }) => {
   );
 };
 
-export default App;
+export default ChatWidget;
