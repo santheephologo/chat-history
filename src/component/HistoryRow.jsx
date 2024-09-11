@@ -1,8 +1,8 @@
 import { formatDate } from "../utils/CommonFuncs";
-const HistoryRow = ({ data }) => {
+const HistoryRow = ({ data, fetchData }) => {
     return (
         <>
-            <div className="chat-history-single-row-container">
+            <div className="chat-history-single-row-container" onClick={fetchData}>
                 <div className="chat-history-single-row-heading">
                     {data.msg}
                 </div>

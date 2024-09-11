@@ -19,8 +19,10 @@ const ChatWidget = () => {
   const [typing, setTyping] = useState(false);
   const [viewInitialPrompt, setViewInitialPrompt] = useState(true);
   const [connectionError, setConnectionError] = useState(false);
+  const [viewNewChat, setViewNewChat] = useState(false)
   const chatboxRef = useRef(null);
   
+  const [currentSessionID, setCurrentSessionID] = useState("");
 
   useEffect(() => {
     if (typing && viewInitialPrompt) {
@@ -28,14 +30,16 @@ const ChatWidget = () => {
     }
   }, [typing, viewInitialPrompt]);
 
+
   useEffect(() => {
     socket.on("connect", () => {
       setConnectionError(false)
       console.log("connected")
-      socket.emit("get_chat_list", { username: "66836f2ef640cff3cdaa0d50" });
+      socket.emit("get_chat_list", { username: "66cc6e2070ca1d7cb45c6642" });
     });
-    
+ 
   }, []);
+
 
   useEffect(() => {
     socket.on("chat_list", (data) => {
@@ -53,9 +57,10 @@ const ChatWidget = () => {
   }, []);
   
   useEffect(() => {
-    socket.on("response", (msg) => {
+    socket.on("response", (data) => {
       setTyping(false);
-      addMessage("Bot", msg);
+      addMessage("Bot", data.reply);
+      setCurrentSessionID(data.session_id)
     });
 
     return () => {
@@ -71,6 +76,20 @@ const ChatWidget = () => {
     });
   }, [])
   
+  useEffect(() => {
+    socket.on("fetched_chat_history", (data) => {
+      setMessages(data.chat_history)
+      setChatList(data.chat_list)
+      setViewHistory(false)
+      setViewNewChat(true)
+      console.log(data)
+    });
+
+    return () => {
+      socket.off("fetched_chat_history");
+    };
+  }, []);
+
   const addMessage = (sender, message) => {
     
     setMessages((prevMessages) => [...prevMessages, { sender, message }]);
@@ -82,11 +101,18 @@ const ChatWidget = () => {
       setInput("");
       setTyping(true);
       addMessage("User", message);
-      socket.emit("message", { client_id: "66836f2ef640cff3cdaa0d50", message });
+      socket.emit("message", { client_id: "66cc6e2070ca1d7cb45c6642", message:message, session_id:currentSessionID });
     }
 
   };
 
+  const fetchChatHistory = (session_id)=>{
+    setCurrentSessionID(session_id)
+    console.log(session_id)
+    console.log(currentSessionID)
+    socket.emit("fetch_chat_history", {"username":session_id})
+  }
+  
   const handleSend = (e) => {
     if (e.which === 13 && !e.shiftKey) {
       e.preventDefault();
@@ -105,10 +131,10 @@ const ChatWidget = () => {
   };
 
   useEffect(() => {
-    if (chatboxRef.current) {
+    if (chatboxRef.current && !viewHistory) {
       chatboxRef.current.scrollTop = chatboxRef.current.scrollHeight;
     }
-  }, [messages]);
+  }, [messages, viewHistory]);
 
   return (
     <div className="chat_bot_main__mx__fabs">
@@ -174,7 +200,7 @@ const ChatWidget = () => {
               <>
           {viewInitialPrompt && !connectionError && (
             <>
-              <div className="initial_prompt">How may I assist you?</div>
+              <div className="initial_prompt">Hello, how may I assist you?</div>
             </>
           )}
   
@@ -217,11 +243,39 @@ const ChatWidget = () => {
             ) : (
                 
                 <div className="history-section">
-                  <div className="chat-history-single-row-header">Chat history</div>
-                      {chatList.map((data, index) => (
+                  <div className="chat-history-single-row-header">
+                    <div>Chat history</div>
+                    <div>
+                      {
+                        viewNewChat && (<button className="new_chat_button" onClick={
+                          () =>{
+                            setMessages([]);
+                            setViewHistory(false)
+                            setCurrentSessionID("")
+                            setViewInitialPrompt(true)
+                            setViewNewChat(false)
+                          }
+                        }>New chat</button>)
+                      }
+                      {
+                        !viewNewChat && (
+                          <button className="back_btn" onClick={
+                            () =>{
+                              
+                              setViewHistory(false)
+                              
+                            }
+                          }>Back</button>
+
+                        )
+                      }
+                      </div>
+                      </div>
+                      {Array.isArray(chatList) &&  chatList.length > 0 && chatList.map((data, index) => (
                         <HistoryRow
                           key={index}
                           data={data}
+                          fetchData={()=>{fetchChatHistory(data.username); setViewInitialPrompt(false)}}
                         />
                       ))}
                   </div>
